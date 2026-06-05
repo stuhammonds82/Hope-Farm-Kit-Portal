@@ -904,8 +904,51 @@ textarea{resize:vertical;min-height:80px;line-height:1.55}
   .sum-label{padding-top:0.5rem;border-top:1px solid var(--grey-100)}
   .sum-grid > :first-child,.sum-grid > :nth-child(2){border-top:none;padding-top:0.3rem}
 }
+
+/* ═══════════════════════════════════
+   EXCEL IMPORT BUTTON
+   ═══════════════════════════════════ */
+.btn-tsb-import{
+  background:#fff;color:#1a6b35;border:1.5px solid #4ade80;
+  cursor:pointer;display:inline-flex;align-items:center;gap:0.4rem;
+}
+.btn-tsb-import:hover{background:#e6f4ea;transform:translateY(-1px)}
+
+/* ═══════════════════════════════════
+   TEAM STORAGE BAR
+   ═══════════════════════════════════ */
+.team-storage-bar{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;
+  background:var(--royal-tint);
+  border:1.5px solid #C7D5F0;
+  border-radius:10px;
+  padding:0.85rem 1.1rem;
+  margin-bottom:1.5rem;
+}
+.tsb-left,.tsb-right{display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap}
+.btn-tsb{
+  font-family:'Inter',sans-serif;font-size:0.82rem;font-weight:600;
+  padding:0.5rem 1rem;border-radius:7px;cursor:pointer;
+  border:1.5px solid transparent;transition:all 0.16s;white-space:nowrap;
+}
+.btn-tsb-save{background:var(--royal);color:#fff;border-color:var(--royal)}
+.btn-tsb-save:hover{background:var(--royal-dark);transform:translateY(-1px)}
+.btn-tsb-load{background:#fff;color:var(--royal);border-color:var(--royal)}
+.btn-tsb-load:hover:not(:disabled){background:var(--royal-tint);transform:translateY(-1px)}
+.btn-tsb-load:disabled,.btn-tsb-del:disabled{opacity:0.4;cursor:not-allowed}
+.btn-tsb-del{background:#fff;color:var(--danger);border-color:#fca5a5;font-size:0.9rem;padding:0.5rem 0.75rem}
+.btn-tsb-del:hover:not(:disabled){background:#FFF0F0}
+.tsb-hint{font-size:0.8rem;color:var(--success);font-weight:500;transition:opacity 0.3s}
+#savedTeamSelect{
+  background:#fff;border:1.5px solid var(--grey-200);border-radius:7px;
+  color:var(--ink);font-family:'Inter',sans-serif;font-size:0.85rem;
+  padding:0.5rem 0.75rem;cursor:pointer;min-width:170px;
+}
+#savedTeamSelect:focus{border-color:var(--royal);box-shadow:0 0 0 3px rgba(27,71,176,0.1)}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -1107,9 +1150,29 @@ textarea{resize:vertical;min-height:80px;line-height:1.55}
     </table>
   </div>
   <button class="add-btn" onclick="addPlayer()">＋ Add Player</button>
+
+  <!-- Save / Load / Import -->
+  <div style="background:var(--royal-tint);border:1.5px solid #C7D5F0;border-radius:10px;padding:0.85rem 1.1rem;margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+      <button class="btn-tsb btn-tsb-save" onclick="saveTeam()">&#128190; Save Team</button>
+      <label class="btn-tsb btn-tsb-import" style="cursor:pointer;background:#fff;color:#1a6b35;border:1.5px solid #4ade80;display:inline-flex;align-items:center;gap:0.4rem;">
+        &#128194; Import from Excel
+        <input type="file" id="xlsxImport" accept=".xlsx,.xls" style="display:none" onchange="importFromExcel(this)"/>
+      </label>
+      <span id="saveHint" style="font-size:0.8rem;color:var(--success);font-weight:500;"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+      <select id="savedTeamSelect" onchange="onTeamSelectChange()" style="background:#fff;border:1.5px solid var(--grey-200);border-radius:7px;color:var(--ink);font-family:'Inter',sans-serif;font-size:0.85rem;padding:0.5rem 0.75rem;min-width:170px;">
+        <option value="">Load saved team&#8230;</option>
+      </select>
+      <button class="btn-tsb btn-tsb-load" id="loadBtn" onclick="loadTeam()" disabled>Load</button>
+      <button class="btn-tsb btn-tsb-del" id="delBtn" onclick="deleteTeam()" disabled title="Delete saved team">&#128465;</button>
+    </div>
+  </div>
+
   <div class="nav">
-    <button class="btn btn-ghost" onclick="goTo(2)">← Back</button>
-    <button class="btn btn-primary" onclick="nextStep(3)">Review Order →</button>
+    <button class="btn btn-ghost" onclick="goTo(2)">&#8592; Back</button>
+    <button class="btn btn-primary" onclick="nextStep(3)">Review Order &#8594;</button>
   </div>
 </section>
 
@@ -1450,6 +1513,181 @@ function submitOrder(){
   });
 }
 
+// ── EXCEL IMPORT ──
+function importFromExcel(input){
+  const file = input.files[0];
+  if(!file){ return; }
+
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+
+      // Try to find the subs sheet — use first sheet as fallback
+      const subsSheet = wb.SheetNames.find(n => n.toLowerCase().includes('sub')) || wb.SheetNames[0];
+      const ws = wb.Sheets[subsSheet];
+
+      // Convert to array of arrays
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+
+      // Row 2 (index 1) contains names; col 0 is 'Month', names start col 1
+      // Filter out nulls, 'Player N' placeholders, and non-string values
+      const nameRow = rows[1] || [];
+      const names = nameRow
+        .slice(1)                            // skip first col ('Month')
+        .filter(v =>
+          v &&
+          typeof v === 'string' &&
+          v.trim() !== '' &&
+          !/^player\s*\d+$/i.test(v.trim()) // skip "Player 13", "Player 14" etc
+        )
+        .map(v => v.trim());
+
+      if(!names.length){
+        alert('No player names found in row 2 of the spreadsheet.\nMake sure your subs sheet has player names in row 2 starting from column B.');
+        input.value = '';
+        return;
+      }
+
+      const replace = document.querySelectorAll('#pr tr').length > 0;
+      if(replace && !confirm(`Found ${names.length} players in "${subsSheet}".\nThis will replace any existing player rows — continue?`)){
+        input.value = '';
+        return;
+      }
+
+      // Clear existing rows and repopulate with imported names
+      document.getElementById('pr').innerHTML = '';
+      pc = 0;
+      names.forEach(name => addPlayer({name}));
+
+      const hint = document.getElementById('saveHint');
+      hint.textContent = `✓ Imported ${names.length} players from ${file.name}`;
+      setTimeout(() => { hint.textContent = ''; }, 4000);
+
+    } catch(err){
+      console.error(err);
+      alert('Could not read the Excel file.\nMake sure it is a .xlsx file and try again.');
+    }
+    input.value = ''; // reset so same file can be re-imported
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── TEAM STORAGE ──
+const STORAGE_KEY = 'hopefarm_saved_teams';
+
+function getSavedTeams(){
+  try{ return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}; }
+  catch(e){ return {}; }
+}
+
+function populateTeamSelect(){
+  const sel = document.getElementById('savedTeamSelect');
+  const teams = getSavedTeams();
+  const current = sel.value;
+  // Clear all except placeholder
+  while(sel.options.length > 1) sel.remove(1);
+  Object.keys(teams).sort().forEach(name=>{
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + ' (' + teams[name].players.length + ' players)';
+    sel.appendChild(opt);
+  });
+  // Restore selection if still exists
+  if(current && teams[current]) sel.value = current;
+  onTeamSelectChange();
+}
+
+function onTeamSelectChange(){
+  const sel = document.getElementById('savedTeamSelect');
+  const hasVal = !!sel.value;
+  document.getElementById('loadBtn').disabled = !hasVal;
+  document.getElementById('delBtn').disabled = !hasVal;
+}
+
+function saveTeam(){
+  const tn = document.getElementById('teamName').value.trim();
+  const ag = document.getElementById('ageGroup').value;
+  const players = getPlayers();
+
+  if(!tn && !ag){ alert('Please fill in Team Name and Age Group on Step 1 before saving.'); return; }
+  if(!players.length){ alert('Please add at least one player before saving.'); return; }
+
+  const key = (tn + (ag?' '+ag:'')).trim();
+  const teams = getSavedTeams();
+  const isUpdate = !!teams[key];
+
+  teams[key] = {
+    name: tn,
+    age: ag,
+    savedAt: new Date().toLocaleDateString('en-GB'),
+    players: players.map(p=>({
+      name:p.name, num:p.num, shirt:p.shirt,
+      shorts:p.shorts, socks:p.socks,
+      sleeve:p.sleeve, gk:p.gk
+    }))
+  };
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
+  populateTeamSelect();
+
+  // Set dropdown to the just-saved team
+  document.getElementById('savedTeamSelect').value = key;
+  onTeamSelectChange();
+
+  const hint = document.getElementById('saveHint');
+  hint.textContent = isUpdate ? '✓ Updated!' : '✓ Saved!';
+  setTimeout(()=>{ hint.textContent=''; }, 3000);
+}
+
+function loadTeam(){
+  const key = document.getElementById('savedTeamSelect').value;
+  if(!key) return;
+  const teams = getSavedTeams();
+  const team = teams[key];
+  if(!team) return;
+
+  if(!confirm('Load "' + key + '"? This will replace all current player rows.')) return;
+
+  // Pre-fill team name & age if fields are empty
+  if(!document.getElementById('teamName').value.trim() && team.name)
+    document.getElementById('teamName').value = team.name;
+  if(!document.getElementById('ageGroup').value && team.age)
+    document.getElementById('ageGroup').value = team.age;
+
+  // Clear existing rows
+  document.getElementById('pr').innerHTML = '';
+  pc = 0;
+
+  // Add players
+  team.players.forEach(p=>{
+    addPlayer({
+      name:p.name, num:p.num, shirt:p.shirt,
+      shorts:p.shorts, socks:p.socks,
+      long:p.sleeve==='Long', gk:p.gk
+    });
+  });
+
+  const hint = document.getElementById('saveHint');
+  hint.textContent = '✓ Loaded ' + team.players.length + ' players';
+  setTimeout(()=>{ hint.textContent=''; }, 3000);
+}
+
+function deleteTeam(){
+  const key = document.getElementById('savedTeamSelect').value;
+  if(!key) return;
+  if(!confirm('Delete saved team "' + key + '"? This cannot be undone.')) return;
+  const teams = getSavedTeams();
+  delete teams[key];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
+  populateTeamSelect();
+}
+
+// Populate on load
+document.addEventListener('DOMContentLoaded', populateTeamSelect);
+
 addPlayer();
+populateTeamSelect();
 </script>
 </body></html>
