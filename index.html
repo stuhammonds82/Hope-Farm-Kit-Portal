@@ -905,6 +905,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.55}
   .sum-grid > :first-child,.sum-grid > :nth-child(2){border-top:none;padding-top:0.3rem}
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
 
@@ -1304,206 +1305,149 @@ function buildSum(){
 }
 
 function submitOrder(){
-  const ps=getPlayers(),tn=document.getElementById('teamName').value,ag=document.getElementById('ageGroup').value,mn=document.getElementById('managerName').value,me=document.getElementById('managerEmail').value,ph=document.getElementById('managerPhone').value,sp=document.getElementById('teamSponsor').value,nt=document.getElementById('notes').value;
+  const ps=getPlayers(),tn=document.getElementById('teamName').value,ag=document.getElementById('ageGroup').value,mn=document.getElementById('managerName').value,me=document.getElementById('managerEmail').value,ph=document.getElementById('managerPhone').value||'N/A',sp=document.getElementById('teamSponsor').value||'N/A',nt=document.getElementById('notes').value;
   document.getElementById('sendingOverlay').classList.add('show');
   document.getElementById('submitBtn').disabled=true;
-  setTimeout(()=>{
-    const dateStr=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-    const sponsorMode=pay==='sponsor';
 
-    // ── Player rows ──
-    const pRows=ps.map((p,i)=>{
-      const stripe=i%2===0?'#ffffff':'#f4f7fd';
-      const numCell=`<td align="center" style="padding:11px 10px;background:${stripe};border-bottom:1px solid #e8edf5;font-family:Georgia,serif;font-size:14px;font-weight:700;color:#1B47B0;">${p.num}</td>`;
-      const nameCell=`<td style="padding:11px 14px;background:${stripe};border-bottom:1px solid #e8edf5;font-size:13.5px;color:#0d1c38;font-weight:500;">${p.name}</td>`;
-      const mkCell=(v)=>`<td align="center" style="padding:11px 8px;background:${stripe};border-bottom:1px solid #e8edf5;font-size:13px;color:#2d3f5e;">${v}</td>`;
-      const sleeveVal=p.sleeve==='Long'?`<span style="background:#dce8fb;color:#1a3d8f;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.5px;">LONG</span>`:`<span style="color:#5a6e8a;font-size:13px;">Short</span>`;
-      const sleeveCell=`<td align="center" style="padding:11px 8px;background:${stripe};border-bottom:1px solid #e8edf5;">${sleeveVal}</td>`;
-      const roleVal=p.gk?`<span style="background:#e6f4ea;color:#1e6b35;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:0.5px;border:1px solid #b7dfbf;">GK</span>`:`<span style="color:#b0bbcc;font-size:13px;">—</span>`;
-      const roleCell=`<td align="center" style="padding:11px 8px;background:${stripe};border-bottom:1px solid #e8edf5;">${roleVal}</td>`;
-      const sponsorCells=sponsorMode?mkCell(p.qz?'✓':'—')+mkCell(p.rj?'✓':'—'):'';
-      return `<tr>${numCell}${nameCell}${mkCell(p.shirt)}${mkCell(p.shorts)}${mkCell(p.socks)}${sleeveCell}${sponsorCells}${roleCell}</tr>`;
-    }).join('');
+  const dateStr=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const sponsorMode=pay==='sponsor';
+  const kitLbl=kitLabel(kit);
 
-    const sponsorTh=sponsorMode?
-      `<th style="${TH}border-right:1px solid #2f5ec4;">QTR ZIP</th><th style="${TH}border-right:1px solid #2f5ec4;">RAIN JKT</th>`:
-      '';
-    const TH=`background:#1B47B0;color:#fff;padding:11px 10px;font-size:10.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;border-right:1px solid #2f5ec4;`;
+  // Build plain-text player list for email
+  let playerText='No  | Name                 | Shirt  | Shorts | Socks           | Sleeve | GK\n';
+  playerText+='-'.repeat(80)+'\n';
+  ps.forEach(p=>{
+    playerText+=`${String(p.num).padEnd(3)} | ${String(p.name).padEnd(19)} | ${String(p.shirt).padEnd(6)} | ${String(p.shorts).padEnd(6)} | ${String(p.socks).padEnd(15)} | ${String(p.sleeve).padEnd(6)} | ${p.gk?'GK':''}\n`;
+  });
 
-    const playerTable=`
-<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-radius:10px;overflow:hidden;border:1.5px solid #dce4f0;">
-  <thead>
+  // Build HTML email body
+  const stripe=(i)=>i%2===0?'#ffffff':'#f4f7fd';
+  const pRows=ps.map((p,i)=>`
     <tr>
-      <th align="center" style="${TH}width:36px;">#</th>
-      <th style="${TH}text-align:left;">Player Name</th>
-      <th align="center" style="${TH}">Shirt</th>
-      <th align="center" style="${TH}">Shorts</th>
-      <th align="center" style="${TH}">Socks</th>
-      <th align="center" style="${TH}">${sponsorMode?'Sleeve</th>'+sponsorTh+'<th align="center" style="'+TH+'border-right:none;">':'Sleeve</th><th align="center" style="'+TH+'border-right:none;">'}Role</th>
-    </tr>
-  </thead>
-  <tbody>${pRows}</tbody>
-</table>`;
+      <td align="center" style="padding:10px;background:${stripe(i)};border-bottom:1px solid #e8edf5;font-family:Georgia,serif;font-size:14px;font-weight:700;color:#1B47B0;">${p.num}</td>
+      <td style="padding:10px 14px;background:${stripe(i)};border-bottom:1px solid #e8edf5;font-size:13px;color:#0d1c38;font-weight:500;">${p.name}</td>
+      <td align="center" style="padding:10px 8px;background:${stripe(i)};border-bottom:1px solid #e8edf5;font-size:13px;color:#2d3f5e;">${p.shirt}</td>
+      <td align="center" style="padding:10px 8px;background:${stripe(i)};border-bottom:1px solid #e8edf5;font-size:13px;color:#2d3f5e;">${p.shorts}</td>
+      <td align="center" style="padding:10px 8px;background:${stripe(i)};border-bottom:1px solid #e8edf5;font-size:13px;color:#2d3f5e;">${p.socks}</td>
+      <td align="center" style="padding:10px 8px;background:${stripe(i)};border-bottom:1px solid #e8edf5;">${p.sleeve==='Long'?'<span style=\'background:#dce8fb;color:#1a3d8f;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;\'>LONG</span>':'<span style=\'color:#5a6e8a;\'>Short</span>'}</td>
+      ${sponsorMode?`<td align="center" style="padding:10px 8px;background:${stripe(i)};border-bottom:1px solid #e8edf5;">${p.qz?'✓':'—'}</td><td align="center" style="padding:10px 8px;background:${stripe(i)};border-bottom:1px solid #e8edf5;">${p.rj?'✓':'—'}</td>`:''}
+      <td align="center" style="padding:10px 8px;background:${stripe(i)};border-bottom:1px solid #e8edf5;">${p.gk?'<span style=\'background:#e6f4ea;color:#1e6b35;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid #b7dfbf;\'>GK</span>':'<span style=\'color:#b0bbcc;\'>—</span>'}</td>
+    </tr>`).join('');
 
-    const infoRow=(label,val)=>val?`
-      <tr>
-        <td style="padding:8px 16px 8px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8a9ab8;white-space:nowrap;vertical-align:top;">${label}</td>
-        <td style="padding:8px 0;font-size:14px;color:#0d1c38;font-weight:500;">${val}</td>
-      </tr>`:'';
+  const TH='background:#1B47B0;color:#fff;padding:11px 10px;font-size:10.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;border-right:1px solid #2f5ec4;';
+  const sponsorTh=sponsorMode?`<th align="center" style="${TH}">Qtr Zip</th><th align="center" style="${TH}">Rain Jkt</th>`:'';
 
-    const logoBlock=logoB64?`
-      <div style="margin-bottom:24px;">
-        <p style="margin:0 0 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#1B47B0;padding-bottom:8px;border-bottom:2px solid #1B47B0;">Sponsor Logo</p>
-        <div style="display:inline-block;background:#f4f7fd;border:1px solid #dce4f0;border-radius:10px;padding:12px 18px;">
-          <img src="${logoB64}" style="max-height:64px;max-width:180px;display:block;object-fit:contain;" alt="Sponsor logo"/>
-        </div>
-      </div>`:'';
+  const logoSection=logoB64?`<tr><td style="padding:0 0 24px;"><p style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#1B47B0;padding-bottom:8px;border-bottom:2px solid #1B47B0;">Sponsor Logo</p><div style="background:#f4f7fd;border:1px solid #dce4f0;border-radius:10px;padding:12px 18px;display:inline-block;"><img src="${logoB64}" style="max-height:64px;max-width:180px;display:block;object-fit:contain;" alt="Sponsor logo"/></div></td></tr>`:'';
 
-    const notesBlock=nt?`
-      <div style="margin-top:24px;background:#fffdf0;border:1px solid #f0e4b0;border-left:4px solid #e8b547;border-radius:0 8px 8px 0;padding:14px 18px;">
-        <p style="margin:0 0 5px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9a7a10;">Notes</p>
-        <p style="margin:0;font-size:13.5px;color:#5c4a00;line-height:1.65;">${nt}</p>
-      </div>`:'';
+  const notesSection=nt?`<div style="margin-top:24px;background:#fffdf0;border:1px solid #f0e4b0;border-left:4px solid #E8B547;border-radius:0 8px 8px 0;padding:14px 18px;"><p style="margin:0 0 5px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9a7a10;">Notes</p><p style="margin:0;font-family:Arial,sans-serif;font-size:13.5px;color:#5c4a00;line-height:1.65;">${nt}</p></div>`:'';
 
-    const html=`<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kit Order – ${tn} ${ag}</title>
-</head>
+  const htmlBody=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#edf0f7;">
-
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#edf0f7;padding:40px 16px 48px;">
 <tr><td align="center">
 <table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:16px;overflow:hidden;box-shadow:0 4px 32px rgba(15,30,80,0.13);">
-
-  <!-- ═══ HEADER ═══ -->
-  <tr>
-    <td style="background:#0d1f52;padding:0;position:relative;">
-      <!-- top stripe accent -->
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td style="height:4px;background:#1B47B0;"></td>
-          <td style="height:4px;background:#E8B547;width:80px;"></td>
-          <td style="height:4px;background:#1B47B0;width:80px;"></td>
-        </tr>
-      </table>
-      <!-- header content -->
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td style="padding:30px 36px 26px;">
-            <p style="margin:0 0 5px;font-family:Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Kit Order · ${dateStr}</p>
-            <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#ffffff;line-height:1.15;letter-spacing:0.3px;">Hope Farm Junior<br>Football Club</h1>
-            <table cellpadding="0" cellspacing="0" style="margin-top:16px;">
-              <tr>
-                <td style="background:#E8B547;height:3px;width:40px;border-radius:2px;"></td>
-                <td style="background:rgba(255,255,255,0.15);height:3px;width:20px;border-radius:2px;padding-left:6px;"></td>
-              </tr>
-            </table>
-          </td>
-          <td style="padding:24px 36px 24px 0;vertical-align:middle;text-align:right;white-space:nowrap;">
-            <div style="display:inline-block;text-align:right;">
-              <p style="margin:0 0 2px;font-family:Arial,sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.45);">Est.</p>
-              <p style="margin:0;font-family:Georgia,serif;font-size:32px;font-weight:700;color:rgba(255,255,255,0.18);line-height:1;">1974</p>
-            </div>
-          </td>
-        </tr>
-      </table>
+<tr><td style="background:#0d1f52;padding:0;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:4px;background:#1B47B0;"></td><td style="height:4px;background:#E8B547;width:80px;"></td><td style="height:4px;background:#1B47B0;width:60px;"></td></tr></table>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td style="padding:28px 36px 24px;">
+      <p style="margin:0 0 5px;font-family:Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Kit Order &middot; ${dateStr}</p>
+      <h1 style="margin:0;font-family:Georgia,serif;font-size:26px;font-weight:700;color:#fff;line-height:1.15;">Hope Farm Junior<br>Football Club</h1>
+      <div style="height:3px;width:40px;background:#E8B547;border-radius:2px;margin-top:14px;"></div>
     </td>
-  </tr>
-
-  <!-- ═══ SUMMARY BAND ═══ -->
-  <tr>
-    <td style="background:#1B47B0;padding:0;">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td style="padding:14px 20px 14px 36px;border-right:1px solid rgba(255,255,255,0.12);width:34%;">
-            <p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Team</p>
-            <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;">${tn} <span style="font-weight:400;opacity:0.8;">${ag}</span></p>
-          </td>
-          <td style="padding:14px 20px;border-right:1px solid rgba(255,255,255,0.12);width:33%;">
-            <p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Players</p>
-            <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;">${ps.length} <span style="font-weight:400;opacity:0.8;">total</span></p>
-          </td>
-          <td style="padding:14px 36px 14px 20px;width:33%;">
-            <p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Payment</p>
-            <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;">${sponsorMode?'Sponsor':'Club'}</p>
-          </td>
-        </tr>
-      </table>
+    <td style="padding:24px 36px 24px 0;text-align:right;vertical-align:middle;">
+      <p style="margin:0 0 2px;font-family:Arial,sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);">Est.</p>
+      <p style="margin:0;font-family:Georgia,serif;font-size:32px;font-weight:700;color:rgba(255,255,255,0.15);line-height:1;">1974</p>
     </td>
-  </tr>
-
-  <!-- ═══ BODY ═══ -->
-  <tr>
-    <td style="background:#ffffff;padding:36px 36px 12px;">
-
-      <!-- SECTION: Order Details -->
-      <p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1B47B0;padding-bottom:9px;border-bottom:2px solid #1B47B0;">Order Details</p>
-      <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:28px;">
-        ${infoRow('Manager', mn)}
-        ${infoRow('Email', `<a href="mailto:${me}" style="color:#1B47B0;">${me}</a>`)}
-        ${ph?infoRow('Phone', ph):''}
-        ${infoRow('Kit Design', kitLabel(kit))}
-        ${sp?infoRow('Sponsor', sp):''}
-      </table>
-
-      ${logoBlock}
-
-      <!-- SECTION: Players -->
-      <p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1B47B0;padding-bottom:9px;border-bottom:2px solid #1B47B0;">Player List</p>
-      ${playerTable}
-
-      ${notesBlock}
-
-    </td>
-  </tr>
-
-  <!-- ═══ FOOTER ═══ -->
-  <tr>
-    <td style="background:#f4f7fd;border-top:1px solid #dce4f0;padding:20px 36px;">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td>
-            <p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:12.5px;color:#3d4f6e;font-weight:500;">Submitted via the <strong style="color:#1B47B0;">Hope Farm JFC Kit Order Portal</strong></p>
-            <p style="margin:0;font-family:Arial,sans-serif;font-size:11.5px;color:#8a9ab8;">Reply to this email with any questions about this order.</p>
-          </td>
-          <td align="right" style="vertical-align:middle;padding-left:16px;">
-            <span style="display:inline-block;background:#0d1f52;color:rgba(255,255,255,0.7);font-family:Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:7px 14px;border-radius:20px;">Est. 1974</span>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-
-  <!-- ═══ BOTTOM STRIPE ═══ -->
-  <tr>
-    <td style="padding:0;">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td style="height:5px;background:#1B47B0;"></td>
-          <td style="height:5px;background:#E8B547;width:60px;"></td>
-          <td style="height:5px;background:#1B47B0;width:60px;"></td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-
-</table>
+  </tr></table>
 </td></tr>
-</table>
+<tr><td style="background:#1B47B0;padding:0;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td style="padding:13px 20px 13px 36px;border-right:1px solid rgba(255,255,255,0.12);width:34%;">
+      <p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Team</p>
+      <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#fff;">${tn} <span style="font-weight:400;opacity:0.8;">${ag}</span></p>
+    </td>
+    <td style="padding:13px 20px;border-right:1px solid rgba(255,255,255,0.12);width:33%;">
+      <p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Players</p>
+      <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#fff;">${ps.length} <span style="font-weight:400;opacity:0.8;">total</span></p>
+    </td>
+    <td style="padding:13px 36px 13px 20px;width:33%;">
+      <p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Payment</p>
+      <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#fff;">${sponsorMode?'Sponsor':'Club'}</p>
+    </td>
+  </tr></table>
+</td></tr>
+<tr><td style="background:#fff;padding:32px 36px 16px;">
+  <p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1B47B0;padding-bottom:9px;border-bottom:2px solid #1B47B0;">Order Details</p>
+  <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:28px;">
+    <tr><td style="padding:7px 16px 7px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8a9ab8;width:90px;vertical-align:top;">Manager</td><td style="padding:7px 0;font-size:14px;color:#0d1c38;font-weight:500;">${mn}</td></tr>
+    <tr><td style="padding:7px 16px 7px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8a9ab8;vertical-align:top;">Email</td><td style="padding:7px 0;font-size:14px;color:#1B47B0;">${me}</td></tr>
+    ${ph!=='N/A'?`<tr><td style="padding:7px 16px 7px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8a9ab8;vertical-align:top;">Phone</td><td style="padding:7px 0;font-size:14px;color:#0d1c38;font-weight:500;">${ph}</td></tr>`:''}
+    <tr><td style="padding:7px 16px 7px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8a9ab8;vertical-align:top;">Kit Design</td><td style="padding:7px 0;font-size:14px;color:#0d1c38;font-weight:500;">${kitLbl}</td></tr>
+    ${sp!=='N/A'?`<tr><td style="padding:7px 16px 7px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8a9ab8;vertical-align:top;">Sponsor</td><td style="padding:7px 0;font-size:14px;color:#0d1c38;font-weight:500;">${sp}</td></tr>`:''}
+  </table>
+  ${logoSection}
+  <p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1B47B0;padding-bottom:9px;border-bottom:2px solid #1B47B0;">Player List</p>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-radius:10px;overflow:hidden;border:1.5px solid #dce4f0;">
+    <thead><tr>
+      <th align="center" style="${TH}width:36px;">#</th>
+      <th style="${TH}text-align:left;">Name</th>
+      <th align="center" style="${TH}">Shirt</th>
+      <th align="center" style="${TH}">Shorts</th>
+      <th align="center" style="${TH}">Socks</th>
+      <th align="center" style="${TH}">${sponsorMode?'Sleeve':'Sleeve'}</th>
+      ${sponsorTh}
+      <th align="center" style="background:#1B47B0;color:#fff;padding:11px 10px;font-size:10.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;">Role</th>
+    </tr></thead>
+    <tbody>${pRows}</tbody>
+  </table>
+  ${notesSection}
+</td></tr>
+<tr><td style="background:#f4f7fd;border-top:1px solid #dce4f0;padding:18px 36px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td><p style="margin:0 0 3px;font-family:Arial,sans-serif;font-size:12px;color:#3d4f6e;font-weight:500;">Submitted via the <strong style="color:#1B47B0;">Hope Farm JFC Kit Order Portal</strong></p><p style="margin:0;font-family:Arial,sans-serif;font-size:11px;color:#8a9ab8;">Reply to this email with any questions about this order.</p></td>
+    <td align="right"><span style="display:inline-block;background:#0d1f52;color:rgba(255,255,255,0.7);font-family:Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:7px 14px;border-radius:20px;">Est. 1974</span></td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:0;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:5px;background:#1B47B0;"></td><td style="height:5px;background:#E8B547;width:60px;"></td><td style="height:5px;background:#1B47B0;width:60px;"></td></tr></table></td></tr>
+</table></td></tr></table>
+</body></html>`;
 
-</body>
-</html>`;
-
-    const subj=`Kit Order – ${tn} ${ag} – ${dateStr}`;
-    const mailto=`mailto:daniellecpaynter@yahoo.co.uk?cc=${encodeURIComponent(me)}&subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(html)}`;
-    try{window.location.href=mailto;}catch(e){}
-    setTimeout(()=>{
-      document.getElementById('sendingOverlay').classList.remove('show');
-      document.getElementById('submitBtn').disabled=false;
-      const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),5000);
-    },1200);
-  },300);
+  // Send via EmailJS
+  emailjs.init({publicKey:'WZjh36VSjlNdsuG-l'});
+  emailjs.send('service_5t0zg6q','template_0tisw4j',{
+    to_email:'daniellecpaynter@yahoo.co.uk',
+    reply_to:me,
+    cc_email:me,
+    subject:`Kit Order – ${tn} ${ag} – ${dateStr}`,
+    team:`${tn} ${ag}`,
+    manager:mn,
+    manager_email:me,
+    manager_phone:ph,
+    kit_design:kitLbl,
+    payment:sponsorMode?'Sponsor':'Club',
+    sponsor:sp,
+    player_count:ps.length,
+    player_list_text:playerText,
+    html_body:htmlBody,
+    date:dateStr
+  }).then(()=>{
+    document.getElementById('sendingOverlay').classList.remove('show');
+    document.getElementById('submitBtn').disabled=false;
+    // Show success screen
+    document.getElementById('s4').innerHTML=`
+      <div style="text-align:center;padding:3rem 2rem;">
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--royal-pale);border:2px solid var(--royal);display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:2rem;">✓</div>
+        <h2 style="font-family:'Anton',sans-serif;font-size:2rem;letter-spacing:2px;color:var(--royal);text-transform:uppercase;margin-bottom:0.75rem;">Order Sent!</h2>
+        <p style="color:var(--grey-600);font-size:1rem;margin-bottom:0.5rem;">Your kit order for <strong>${tn} ${ag}</strong> has been sent to Danielle.</p>
+        <p style="color:var(--grey-500);font-size:0.9rem;margin-bottom:2rem;">A copy has been sent to <strong>${me}</strong></p>
+        <button class="btn btn-primary" onclick="location.reload()">Submit Another Order</button>
+      </div>`;
+  }).catch((err)=>{
+    document.getElementById('sendingOverlay').classList.remove('show');
+    document.getElementById('submitBtn').disabled=false;
+    console.error('EmailJS error:',err);
+    alert('There was a problem sending the email. Please check your EmailJS setup or contact your club administrator.\n\nError: '+JSON.stringify(err));
+  });
 }
 
 addPlayer();
